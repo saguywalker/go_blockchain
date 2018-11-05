@@ -12,11 +12,9 @@ import (
 
 func main() {
 	bc := NewBlockchain()
-	bc.AddBlock("Test 1st block!")
-	fmt.Println(bc.blocks[1].Hash)
-	fmt.Println(bc.blocks[1].Data)
-	fmt.Println(bc.blocks[1].Nonce)
-	fmt.Println(bc.blocks[1].Timestamp)
+	bc.AddBlock("Second block from sky.")
+	fmt.Println(NewProofOfWork(bc.blocks[1]).Validate())
+
 }
 
 const targetBits = 24
@@ -27,7 +25,7 @@ type Block struct {
 	Data          []byte
 	PrevBlockHash []byte
 	Hash          []byte
-	Nonce         int64
+	Nonce         int
 }
 
 type Blockchain struct {
@@ -54,8 +52,8 @@ func NewBlock(data string, prevBlockHash []byte) *Block {
 	block := &Block{time.Now().Unix(), []byte(data), prevBlockHash, []byte{}, 0}
 	pow := NewProofOfWork(block)
 	nonce, hash := pow.Solve()
-	block.Nonce = int64(nonce)
-	block.Hash = hash
+	block.Nonce = nonce
+	block.Hash = hash[:]
 	return pow.block
 }
 
@@ -115,4 +113,13 @@ func (pow *ProofOfWork) Solve() (int, []byte) {
 	fmt.Println("\n")
 
 	return nonce, hash[:]
+}
+
+func (pow *ProofOfWork) Validate() bool {
+	data := pow.prepareData(pow.block.Nonce)
+	hash := sha256.Sum256(data)
+	var hashInt big.Int
+	hashInt.SetBytes(hash[:])
+	isValid := hashInt.Cmp(pow.target) == -1
+	return isValid
 }
