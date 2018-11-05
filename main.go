@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/gob"
 	"fmt"
 	"math"
 	"math/big"
+	"os"
 	"strconv"
 	"time"
 )
@@ -14,7 +16,8 @@ func main() {
 	bc := NewBlockchain()
 	bc.AddBlock("Second block from sky.")
 	fmt.Println(NewProofOfWork(bc.blocks[1]).Validate())
-
+	fmt.Println(bc.blocks[0].Serialization())
+	fmt.Println(bc.blocks[1].Serialization())
 }
 
 const targetBits = 24
@@ -122,4 +125,25 @@ func (pow *ProofOfWork) Validate() bool {
 	hashInt.SetBytes(hash[:])
 	isValid := hashInt.Cmp(pow.target) == -1
 	return isValid
+}
+
+func (b *Block) Serialization() []byte {
+	var result bytes.Buffer
+	encoder := gob.NewEncoder(&result)
+	err := encoder.Encode(b)
+	if err != nil {
+		fmt.Printf("Error to serialize block:%x.\n", b.Hash)
+		os.Exit(1)
+	}
+	return result.Bytes()
+}
+
+func DeserializeBlock(d []byte) *Block {
+	var block Block
+	decoder := gob.NewDecoder(bytes.NewReader(d))
+	err := decoder.Decode(&block)
+	if err != nil {
+		fmt.Printf("Error to bytes: %s", d)
+	}
+	return &block
 }
