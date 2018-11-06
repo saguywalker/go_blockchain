@@ -10,18 +10,18 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/boltdb/bolt"
 )
 
 func main() {
-	bc := NewBlockchain()
-	bc.AddBlock("Second block from sky.")
-	fmt.Println(NewProofOfWork(bc.blocks[1]).Validate())
-	fmt.Println(bc.blocks[0].Serialization())
-	fmt.Println(bc.blocks[1].Serialization())
+
 }
 
 const targetBits = 24
 const maxNonce = math.MaxInt64
+const dbfile = "blockchain_db"
+const blocksBucket = "first_chain"
 
 type Block struct {
 	Timestamp     int64
@@ -32,7 +32,8 @@ type Block struct {
 }
 
 type Blockchain struct {
-	blocks []*Block
+	tip []byte
+	db  *bolt.DB
 }
 
 type ProofOfWork struct {
@@ -61,9 +62,27 @@ func NewBlock(data string, prevBlockHash []byte) *Block {
 }
 
 func (bc *Blockchain) AddBlock(data string) {
-	prevBlock := bc.blocks[len(bc.blocks)-1]
-	newBlock := NewBlock(data, prevBlock.Hash)
-	bc.blocks = append(bc.blocks, newBlock)
+	var tip []byte
+
+	err := bc.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(blocksBucket))
+		tip = b.Get([]byte("l"))
+
+		return nil
+	})
+	newBlock := NewBlock(data, tip)
+	err = bc.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(blocksBucket))
+		b.Put(newBlock.Hash, newBlock.Serialization())
+		b.Put([]byte("l"), tip)
+		bc.tip = newBlock.Hash
+
+		return nil
+	})
+
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error with bolt db", err)
+	}
 }
 
 func NewGenesisBlock() *Block {
@@ -71,7 +90,24 @@ func NewGenesisBlock() *Block {
 }
 
 func NewBlockchain() *Blockchain {
-	return &Blockchain{[]*Block{NewGenesisBlock()}}
+	var tip []byte
+	db, err := bolt.Open(dbfile, 0600, nil)
+
+	err = db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(blocksBucket))
+
+		if b == nil {
+			genesis := NewGenesisBlock()
+			b, err = tx.CreateBucket([]byte(blocksBucket))
+			err = b.Put(genesis.Hash, genesis.Serialization())
+			err = b.Put([]byte("l"), genesis.Hash)
+			tip = genesis.Hash
+		} else {
+			tip = b.Get([]byte("l"))
+		}
+		return nil
+	})
+	return &Blockchain{tip, db}
 }
 
 func NewProofOfWork(b *Block) *ProofOfWork {
