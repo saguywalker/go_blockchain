@@ -16,10 +16,7 @@ import (
 )
 
 func main() {
-	bc := NewBlockchain()
-	defer bc.db.Close()
-
-	cli := CLI{bc}
+	cli := CLI{}
 	cli.Run()
 }
 
@@ -27,10 +24,11 @@ const targetBits = 16
 const maxNonce = math.MaxInt64
 const dbfile = "blockchain_db"
 const blocksBucket = "first_chain"
+const genesisCoinbaseData = "Thx, miner(s)!"
 
 type Block struct {
 	Timestamp     int64
-	Data          []byte
+	Transactions  []*Transaction
 	PrevBlockHash []byte
 	Hash          []byte
 	Nonce         int
@@ -61,13 +59,13 @@ func IntToHex(num int64) []byte {
 
 func (b *Block) setHash() {
 	timestamp := []byte(strconv.FormatInt(b.Timestamp, 10))
-	headers := bytes.Join([][]byte{b.PrevBlockHash, b.Data, timestamp}, []byte{})
+	headers := bytes.Join([][]byte{b.PrevBlockHash, b.HashTransaction(), timestamp}, []byte{})
 	hash := sha256.Sum256(headers)
 	b.Hash = hash[:]
 }
 
-func NewBlock(data string, prevBlockHash []byte) *Block {
-	block := &Block{time.Now().Unix(), []byte(data), prevBlockHash, []byte{}, 0}
+func NewBlock(txs []*Transaction, prevBlockHash []byte) *Block {
+	block := &Block{time.Now().Unix(), txs, prevBlockHash, []byte{}, 0}
 	pow := NewProofOfWork(block)
 	nonce, hash := pow.Solve()
 	block.Nonce = nonce
@@ -75,7 +73,7 @@ func NewBlock(data string, prevBlockHash []byte) *Block {
 	return pow.block
 }
 
-func (bc *Blockchain) AddBlock(data string) {
+func (bc *Blockchain) AddBlock(txs []*Transaction) {
 	var tip []byte
 
 	err := bc.db.View(func(tx *bolt.Tx) error {
@@ -84,7 +82,7 @@ func (bc *Blockchain) AddBlock(data string) {
 
 		return nil
 	})
-	newBlock := NewBlock(data, tip)
+	newBlock := NewBlock(txs, tip)
 	err = bc.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		err := b.Put(newBlock.Hash, newBlock.Serialization())
@@ -103,19 +101,19 @@ func (bc *Blockchain) AddBlock(data string) {
 	}
 }
 
-func NewGenesisBlock() *Block {
-	return NewBlock("Genesis Block!", []byte{})
+func NewGenesisBlock(coinbase *Transaction) *Block {
+	return NewBlock([]*Transaction{coinbase}, []byte{})
 }
 
-func NewBlockchain() *Blockchain {
+func NewBlockchain(address string) *Blockchain {
 	var tip []byte
 	db, err := bolt.Open(dbfile, 0600, nil)
 
 	err = db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
-
 		if b == nil {
-			genesis := NewGenesisBlock()
+			cbtx := NewCoinbaseTX(address, genesisCoinbaseData)
+			genesis := NewGenesisBlock(cbtx)
 			b, err = tx.CreateBucket([]byte(blocksBucket))
 			err = b.Put(genesis.Hash, genesis.Serialization())
 			err = b.Put([]byte("l"), genesis.Hash)
@@ -140,7 +138,7 @@ func (pow *ProofOfWork) prepareData(nonce int) []byte {
 	data := bytes.Join(
 		[][]byte{
 			pow.block.PrevBlockHash,
-			pow.block.Data,
+			pow.block.HashTransaction(),
 			IntToHex(pow.block.Timestamp),
 			IntToHex(int64(targetBits)),
 			IntToHex(int64(nonce)),
@@ -151,11 +149,21 @@ func (pow *ProofOfWork) prepareData(nonce int) []byte {
 	return data
 }
 
+func (b *Block) HashTransaction() []byte {
+	var txHashes [][]byte
+	var txHash [32]byte
+	for _, tx := range b.Transactions {
+		txHashes = append(txHashes, tx.ID)
+	}
+	txHash = sha256.Sum256(bytes.Join(txHashes, []byte{}))
+	return txHash[:]
+}
+
 func (pow *ProofOfWork) Solve() (int, []byte) {
 	var hashInt big.Int
 	var hash [32]byte
 	nonce := 0
-	fmt.Printf("Mining the block \"%s\"\n", pow.block.Data)
+	fmt.Printf("Mining the block...")
 	for nonce < maxNonce {
 		data := pow.prepareData(nonce)
 		hash = sha256.Sum256(data)
@@ -204,6 +212,7 @@ func DeserializeBlock(d []byte) *Block {
 }
 
 func (bc *Blockchain) Iterator() *BlockchainIterator {
+	fmt.Println(string(bc.tip))
 	return &BlockchainIterator{bc.tip, bc.db}
 }
 
@@ -229,13 +238,13 @@ func (cli *CLI) Run() {
 		os.Exit(1)
 	}
 
-	addBlockCmd := flag.NewFlagSet("addblock", flag.ExitOnError)
+	createBlockchainCmd := flag.NewFlagSet("createblockchain", flag.ExitOnError)
 	printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
-	addBlockData := addBlockCmd.String("data", "", "Block data")
+	createBlockchainAddress := createBlockchainCmd.String("address", "", "The address to send genesis block reward to.")
 
 	switch os.Args[1] {
-	case "addblock":
-		err := addBlockCmd.Parse(os.Args[2:])
+	case "createblockchain":
+		err := createBlockchainCmd.Parse(os.Args[2:])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "addblock", err)
 		}
@@ -246,15 +255,16 @@ func (cli *CLI) Run() {
 		}
 	default:
 		//cli.printUsage()
+		fmt.Printf("Unknown argument: %s\n", string(os.Args[1]))
 		os.Exit(1)
 	}
 
-	if addBlockCmd.Parsed() {
-		if *addBlockData == "" {
-			//addBlockCmd.Usage()
+	if createBlockchainCmd.Parsed() {
+		if *createBlockchainAddress == "" {
+			createBlockchainCmd.Usage()
 			os.Exit(1)
 		}
-		cli.addBlock(*addBlockData)
+		cli.createBlockchain(*createBlockchainAddress)
 	}
 
 	if printChainCmd.Parsed() {
@@ -262,17 +272,19 @@ func (cli *CLI) Run() {
 	}
 }
 
-func (cli *CLI) addBlock(data string) {
-	cli.bc.AddBlock(data)
+func (cli *CLI) addBlock(txs []*Transaction) {
+	cli.bc.AddBlock(txs)
 	fmt.Println("Success!")
 }
 
 func (cli *CLI) printChain() {
+	fmt.Println(&cli)
+	fmt.Println(&cli.bc.tip)
 	bci := cli.bc.Iterator()
 	for {
 		block := bci.Next()
 		fmt.Printf("Prev. hash: %x\n", block.PrevBlockHash)
-		fmt.Printf("Data: %s\n", block.Data)
+		fmt.Printf("Data: %s\n", block.HashTransaction())
 		fmt.Printf("Hash: %x\n", block.Hash)
 		pow := NewProofOfWork(block)
 		fmt.Printf("PoW: %s\n", strconv.FormatBool(pow.Validate()))
@@ -282,4 +294,10 @@ func (cli *CLI) printChain() {
 			break
 		}
 	}
+}
+
+func (cli *CLI) createBlockchain(address string) {
+	bc := NewBlockchain(address)
+	defer bc.db.Close()
+	fmt.Println("Done!")
 }
