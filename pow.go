@@ -38,7 +38,7 @@ func (pow *ProofOfWork) Solve() (int, []byte) {
 	var hashInt big.Int
 	var hash [32]byte
 	nonce := 0
-	fmt.Printf("Mining the block...")
+	fmt.Printf("Mining the block...\n")
 	for nonce < maxNonce {
 		data := pow.prepareData(nonce)
 		hash = sha256.Sum256(data)
@@ -51,8 +51,7 @@ func (pow *ProofOfWork) Solve() (int, []byte) {
 			nonce++
 		}
 	}
-	fmt.Println("\n")
-
+	fmt.Println()
 	return nonce, hash[:]
 }
 

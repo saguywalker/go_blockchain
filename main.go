@@ -10,7 +10,7 @@ func main() {
 	cli.Run()
 }
 
-const targetBits = 16
+const targetBits = 22
 const maxNonce = math.MaxInt64
 const dbfile = "blockchain_db"
 const blocksBucket = "first_chain"

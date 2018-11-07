@@ -43,7 +43,6 @@ func (bc *Blockchain) AddBlock(txs []*Transaction) {
 func NewBlockchain(address string) *Blockchain {
 	var tip []byte
 	db, err := bolt.Open(dbfile, 0600, nil)
-
 	err = db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		if b == nil {

@@ -16,20 +16,28 @@ func (cli *CLI) Run() {
 		os.Exit(1)
 	}
 
+	addBlockCmd := flag.NewFlagSet("addblock", flag.ExitOnError)
 	createBlockchainCmd := flag.NewFlagSet("createblockchain", flag.ExitOnError)
 	printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
+
+	addBlockAddress := addBlockCmd.String("address", "", "The address to send block reward to.")
 	createBlockchainAddress := createBlockchainCmd.String("address", "", "The address to send genesis block reward to.")
 
 	switch os.Args[1] {
 	case "createblockchain":
 		err := createBlockchainCmd.Parse(os.Args[2:])
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "addblock", err)
+			fmt.Fprintln(os.Stderr, "createblockchain", err)
 		}
 	case "printchain":
 		err := printChainCmd.Parse(os.Args[2:])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "printchain", err)
+		}
+	case "addblock":
+		err := addBlockCmd.Parse(os.Args[2:])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "addblock", err)
 		}
 	default:
 		//cli.printUsage()
@@ -48,8 +56,16 @@ func (cli *CLI) Run() {
 	if printChainCmd.Parsed() {
 		cli.printChain()
 	}
+
+	if addBlockCmd.Parsed() {
+		if *addBlockAddress == "" {
+			addBlockCmd.Usage()
+			os.Exit(1)
+		}
+		cli.addBlock([]*Transaction{}, *addBlockAddress)
+	}
 }
-func (cli *CLI) addBlock(txs []*Transaction) {
+func (cli *CLI) addBlock(txs []*Transaction, address string) {
 	cli.bc.AddBlock(txs)
 	fmt.Println("Success!")
 }
