@@ -13,7 +13,6 @@ type BlockchainIterator struct {
 }
 
 func (bc *Blockchain) Iterator() *BlockchainIterator {
-	fmt.Println(string(bc.tip))
 	return &BlockchainIterator{bc.tip, bc.db}
 }
 

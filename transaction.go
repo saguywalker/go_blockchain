@@ -58,3 +58,15 @@ func (tx *Transaction) Hash() []byte {
 
 	return hash[:]
 }
+
+func (in *TXInput) CanUnlockOutputWith(unlockingData string) bool {
+	return in.ScriptSig == unlockingData
+}
+
+func (out *TXOutput) CanBeUnlockedWith(unlockingData string) bool {
+	return out.ScriptPubKey == unlockingData
+}
+
+func (tx *Transaction) IsCoinbase() bool {
+	return tx.Vin[0].Txid[:] == nil
+}
