@@ -1,8 +1,10 @@
-package goblockchain
+package main
 
 import (
+	"bytes"
+	"encoding/binary"
+	"log"
 	"math"
-	"strconv"
 )
 
 func main() {
@@ -12,10 +14,15 @@ func main() {
 
 const targetBits = 22
 const maxNonce = math.MaxInt64
-const dbfile = "blockchain_db"
-const blocksBucket = "first_chain"
-const genesisCoinbaseData = "Thx, miner(s)!"
+const dbFile = "blockchain.db"
+const blocksBucket = "blocks"
+const genesisCoinbaseData = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks"
 
 func IntToHex(num int64) []byte {
-	return []byte(strconv.FormatInt(num, 16))
+	buff := new(bytes.Buffer)
+	err := binary.Write(buff, binary.BigEndian, num)
+	if err != nil {
+		log.Panic(err)
+	}
+	return buff.Bytes()
 }

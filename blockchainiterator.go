@@ -1,4 +1,4 @@
-package goblockchain
+package main
 
 import (
 	"fmt"
@@ -31,4 +31,12 @@ func (it *BlockchainIterator) Next() *Block {
 	it.currentBlockHash = block.PrevBlockHash
 
 	return block
+}
+
+func dbExists() bool {
+	if _, err := os.Stat(dbFile); os.IsNotExist(err) {
+		return false
+	}
+
+	return true
 }
