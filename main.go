@@ -17,6 +17,9 @@ const maxNonce = math.MaxInt64
 const dbFile = "blockchain.db"
 const blocksBucket = "blocks"
 const genesisCoinbaseData = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks"
+const version = byte(0x00)
+const walletFile = "wallet.dat"
+const addressChecksumLen = 4
 
 func IntToHex(num int64) []byte {
 	buff := new(bytes.Buffer)
